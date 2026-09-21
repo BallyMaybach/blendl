@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f1e7">
+<title>Stammbaum Fanderl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1 id="docTitle">Stammbaum Fanderl</h1>
+      <p id="docSubtitle">Bergen im Chiemgau</p>
+    </div>
+    <button class="icon-btn" id="btnMenu" aria-label="Menü">&#9776;</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===== Stammbaum ===== -->
+  <section class="view is-active" id="view-tree">
+    <div class="tree-stage" id="stage">
+      <div class="tree-canvas" id="canvas">
+        <svg class="tree-lines" id="lines"></svg>
+        <div class="tree-nodes" id="nodes"></div>
+      </div>
+    </div>
+    <div class="zoom-controls">
+      <button class="round-btn" id="btnZoomIn" aria-label="Größer">+</button>
+      <button class="round-btn" id="btnZoomOut" aria-label="Kleiner">&minus;</button>
+      <button class="round-btn" id="btnFit" aria-label="Alles zeigen">&#9744;</button>
+    </div>
+    <p class="hint" id="treeHint">Ziehen zum Bewegen &middot; zwei Finger zum Zoomen &middot; Person antippen</p>
+  </section>
+
+  <!-- ===== Weggefährten als Netzwerk ===== -->
+  <section class="view" id="view-people">
+    <div class="tree-stage" id="netStage">
+      <div class="tree-canvas" id="netCanvas">
+        <svg class="tree-lines" id="netLines"></svg>
+        <div class="tree-nodes" id="netNodes"></div>
+      </div>
+    </div>
+    <div class="float-search">
+      <input type="search" id="searchCompanions" placeholder="Name suchen …" autocomplete="off">
+    </div>
+    <div class="zoom-controls">
+      <button class="round-btn" id="btnNetIn" aria-label="Größer">+</button>
+      <button class="round-btn" id="btnNetOut" aria-label="Kleiner">&minus;</button>
+      <button class="round-btn" id="btnNetFit" aria-label="Alles zeigen">&#9744;</button>
+    </div>
+    <p class="hint" id="netHint">34 Weggefährten aus dem Heft &middot; antippen für Details</p>
+  </section>
+
+  <!-- ===== Zeitstrahl ===== -->
+  <section class="view" id="view-time">
+    <div class="list-wrap">
+      <div id="timeline" class="timeline"></div>
+      <button class="wide-btn" id="btnAddEvent">+ Ereignis hinzufügen</button>
+      <h2 class="lieder-head">Lieder aus dem Heft</h2>
+      <div id="songList" class="song-list"></div>
+      <p class="source">Quelle: Volksmusik-Zeitung, Jahrgang 6, Nr. 1, Frühjahr/Sommer 2026, Sonderheft „Wastl Fanderl (1915-1991) – Ein Leben für die Volksmusik“, Seiten 50 bis 53. Herausgeber: EBES-Volksmusik.</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button class="tab is-active" data-view="view-tree"><span>&#9751;</span>Stammbaum</button>
+  <button class="tab" data-view="view-people"><span>&#9786;</span>Weggefährten</button>
+  <button class="tab" data-view="view-time"><span>&#9202;</span>Zeitstrahl</button>
+</nav>
+
+<!-- ===== Personen-Detail ===== -->
+<div class="sheet-backdrop" id="backdrop" hidden></div>
+
+<section class="sheet" id="sheet" hidden aria-modal="true" role="dialog">
+  <button class="sheet-grip" id="sheetClose" aria-label="Schließen"></button>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+
+<!-- ===== Formular (Person bearbeiten) ===== -->
+<section class="sheet" id="formSheet" hidden aria-modal="true" role="dialog">
+  <button class="sheet-grip" id="formClose" aria-label="Schließen"></button>
+  <div class="sheet-body">
+    <h2 id="formTitle">Person bearbeiten</h2>
+    <form id="personForm" autocomplete="off">
+      <label>Name<input name="name" required placeholder="Vorname Nachname"></label>
+      <label>Rolle / Beruf<input name="role" placeholder="z. B. Bader, Sängerin"></label>
+      <div class="row2">
+        <label>Geboren<input name="born" placeholder="z. B. 1915"></label>
+        <label>Gestorben<input name="died" placeholder="z. B. 1991"></label>
+      </div>
+      <label>Ort<input name="place" placeholder="z. B. Bergen im Chiemgau"></label>
+      <label>Text / Erinnerungen<textarea name="notes" rows="6" placeholder="Was weiß man über diese Person?"></textarea></label>
+
+      <div class="photo-field">
+        <div class="photo-preview" id="photoPreview"></div>
+        <div class="photo-actions">
+          <label class="file-btn">Foto wählen<input type="file" id="photoInput" accept="image/*"></label>
+          <button type="button" class="ghost-btn" id="photoRemove">Foto entfernen</button>
+        </div>
+      </div>
+
+      <label id="sexField">Farbe / Geschlecht
+        <select name="sex">
+          <option value="m">männlich (blau)</option>
+          <option value="w">weiblich (orange)</option>
+        </select>
+      </label>
+
+      <label id="groupField">Gruppe im Netzwerk
+        <select name="group"></select>
+      </label>
+
+      <fieldset id="relationFields">
+        <legend>Verbindungen</legend>
+        <label>Elternteil 1<select name="parent1"></select></label>
+        <label>Elternteil 2<select name="parent2"></select></label>
+        <label>Partner / Partnerin<select name="partner"></select></label>
+      </fieldset>
+
+      <div class="form-actions">
+        <button type="submit" class="primary-btn">Speichern</button>
+        <button type="button" class="danger-btn" id="btnDelete">Löschen</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- ===== Ereignis-Formular ===== -->
+<section class="sheet" id="eventSheet" hidden aria-modal="true" role="dialog">
+  <button class="sheet-grip" id="eventClose" aria-label="Schließen"></button>
+  <div class="sheet-body">
+    <h2 id="eventTitle">Ereignis</h2>
+    <form id="eventForm" autocomplete="off">
+      <label>Wann<input name="date" placeholder="z. B. 24. Juni 1915"></label>
+      <label>Überschrift<input name="title" required placeholder="Was ist passiert?"></label>
+      <label>Text<textarea name="text" rows="6"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="primary-btn">Speichern</button>
+        <button type="button" class="danger-btn" id="btnDeleteEvent">Löschen</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- ===== Menü ===== -->
+<section class="sheet" id="menuSheet" hidden aria-modal="true" role="dialog">
+  <button class="sheet-grip" id="menuClose" aria-label="Schließen"></button>
+  <div class="sheet-body">
+    <h2>Menü</h2>
+    <div class="menu-list">
+      <button class="menu-item" id="btnAddPerson"><b>Person zum Stammbaum</b><small>Kind, Partner oder Elternteil ergänzen</small></button>
+      <button class="menu-item" id="btnAddCompanion"><b>Weggefährte hinzufügen</b><small>Kommt ins Netzwerk rund um Wastl</small></button>
+      <button class="menu-item" id="btnExport"><b>Sicherung speichern</b><small>Alles als Datei herunterladen</small></button>
+      <label class="menu-item" for="importInput"><b>Sicherung laden</b><small>Datei vom Handy oder Computer einlesen</small></label>
+      <input type="file" id="importInput" accept="application/json" hidden>
+      <button class="menu-item" id="btnPrint"><b>Drucken / als PDF</b><small>Stammbaum und Texte ausdrucken</small></button>
+      <button class="menu-item danger" id="btnReset"><b>Auf Original zurücksetzen</b><small>Alle eigenen Änderungen verwerfen</small></button>
+    </div>
+    <p class="storage-note" id="storageNote"></p>
+  </div>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
