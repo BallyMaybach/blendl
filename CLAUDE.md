@@ -1,16 +1,15 @@
 # CLAUDE.md
 
-- **Projekt:** Stammbaum Fanderl
-- **Was es tut:** Interaktiver Stammbaum als Webapp (zoomen, Personen antippen, Fotos und Texte ergaenzen). Quelle: Volksmusik-Zeitung Fruehjahr/Sommer 2026, Sonderheft Wastl Fanderl (1915-1991).
-- **Stand:** Stammbaum-Ansicht mit Pan/Zoom und Umschalter Blendl (62 Personen, 12 Generationen ab ca. 1650, aus den handschriftlichen Blaettern I-V) / Fanderl (9 Personen), Weggefaehrten als zoombares Netzwerk um Wastl (34 Personen in 5 Gruppen), Zeitstrahl mit 31 Ereignissen und 7 Liedern, Bearbeiten-Modus, Foto-Upload, Export/Import als JSON.
-- **Jetzt:** Daten pruefen und ergaenzen (echte Familienlinie Bally <-> Fanderl fehlt noch).
+- **Projekt:** Stammbaum Blendl (Repo heisst noch stammbaum-fanderl)
+- **Was es tut:** Interaktiver Stammbaum als Webapp (zoomen, Personen antippen, Fotos und Texte ergaenzen).
+- **Stand:** Nur noch der Stammbaum der Familie Blendl: 62 Personen, 12 Generationen ab ca. 1650, abgeschrieben von den handschriftlichen Blaettern I-V. Kompakte Karten (116x122). Bearbeiten-Modus, Foto-Upload, Export/Import als JSON. Fanderl-Familie, Weggefaehrten-Netzwerk und Zeitstrahl wurden entfernt.
+- **Jetzt:** Unsichere Lesungen pruefen (stehen in den Notizen der Personen), fehlende Orte ergaenzen.
 - **Deployment:** GitHub Pages, https://ballymaybach.github.io/stammbaum-fanderl/ (lokal: `python -m http.server 5173`)
-- **Design-Richtung:** Light, warm (Papier/Sepia), mobile-first, grosse Schrift fuer Opa.
+- **Design-Richtung:** Light, warm (Papier/Sepia), mobile-first.
 
 ## Learnings
-- Daten liegen in `data.js` (Startdatensatz) und werden beim ersten Laden in localStorage kopiert (`stammbaum-fanderl-v1`). Neue Personen in `data.js`: `INITIAL_DATA.version` hochzaehlen, dann ergaenzt `normalize` fehlende IDs automatisch, ohne eigene Aenderungen zu verlieren. Geaenderte Felder bestehender Personen greifen weiterhin erst nach "Zuruecksetzen".
-- Familienpersonen haben ein Feld `line` (`blendl` / `fanderl`), die Linien stehen in `LINES` in data.js. Mehrere Ehen: Person mit den meisten Partnern steht in der Mitte der Einheit (`computeLayout`).
-- Fotos werden im Browser auf max. 700px verkleinert und als DataURL in localStorage gespeichert. localStorage ist auf ca. 5 MB begrenzt, deshalb Export/Import als Backup nutzen.
-- Netzwerk-Layout ist radial: Wastl in der Mitte, 5 Gruppen-Hubs aussen herum, Mitglieder auf ein bis zwei Ringen. Der Radius wird aus dem Winkelabstand berechnet, damit immer mindestens 130px zwischen den Knoten bleiben (`renderNetwork` in script.js). Gruppen und Geschlecht stehen in `GROUPS` und `FEMALE_IDS` am Ende von data.js.
-- Startansicht (zentrieren/einpassen) niemals nur in `requestAnimationFrame` setzen: bei minimiertem Fenster laeuft rAF nicht. Immer zusaetzlich direkt aufrufen und mit setTimeout absichern (`startViews`).
-- Handschriftliche Randnotizen auf den Scans (NSDAP-Mitgliedschaft 14.10.1938 usw.) sind als solche gekennzeichnet und nicht Teil des gedruckten Textes.
+- Daten liegen in `data.js` (Startdatensatz) und werden beim ersten Laden in localStorage kopiert (`stammbaum-blendl-v1`). Neue Personen in `data.js`: `INITIAL_DATA.version` hochzaehlen, dann ergaenzt `normalize` fehlende IDs automatisch, ohne eigene Aenderungen zu verlieren. Geaenderte Felder bestehender Personen greifen erst nach "Zuruecksetzen".
+- Mehrere Ehen: die Person mit den meisten Partnern steht in der Mitte der Einheit, Linien nur zwischen echten Partnern (`computeLayout` / `renderTree`).
+- Startansicht fokussiert `INITIAL_DATA.focus` (Balthasar). Nie nur in `requestAnimationFrame` setzen: bei minimiertem Fenster laeuft rAF nicht, deshalb zusaetzlich direkt und per setTimeout (`startViews`).
+- Nach Aenderungen an JS/CSS die `?v=` Nummer in index.html hochzaehlen, sonst zeigt GitHub Pages aus dem Cache die alte Version.
+- Fotos werden auf max. 700px verkleinert und als DataURL in localStorage gespeichert (ca. 5 MB Limit), deshalb Export/Import als Backup nutzen.

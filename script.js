@@ -1,15 +1,12 @@
-/* Stammbaum Fanderl — Vanilla JS, localStorage */
+/* Stammbaum Blendl — Vanilla JS, localStorage */
 
-const STORE_KEY = 'stammbaum-fanderl-v1';
+const STORE_KEY = 'stammbaum-blendl-v1';
 
-const NODE_W = 150, NODE_H = 172, H_GAP = 26, V_GAP = 72, SPOUSE_GAP = 16;
-const NN_W = 112, NN_H = 96;
+const NODE_W = 116, NODE_H = 122, H_GAP = 12, V_GAP = 40, SPOUSE_GAP = 6;
 
 let state = load();
 let editingPersonId = null;
-let editingEventId = null;
 let pendingPhoto = null;   // null = unverändert, '' = entfernt, string = neues Foto
-let currentLine = readLine();
 
 /* ===================== Daten ===================== */
 
@@ -25,25 +22,15 @@ function load() {
   return normalize(data || clone(INITIAL_DATA));
 }
 
-/* Geschlecht und Netzwerk-Gruppe ergänzen, falls nicht gesetzt */
+/* Neue Personen aus einer neueren data.js übernehmen, ohne eigene Änderungen zu verlieren */
 function normalize(data) {
-  data.events = data.events || [];
-  data.songs = data.songs || [];
-  /* Neue Personen aus einer neueren data.js übernehmen, ohne eigene Änderungen zu verlieren */
   if ((data.version || 1) < INITIAL_DATA.version) {
     INITIAL_DATA.persons.forEach(p => {
       if (!data.persons.some(x => x.id === p.id)) data.persons.push(clone(p));
     });
     data.version = INITIAL_DATA.version;
   }
-  data.persons.forEach(p => {
-    if (p.kind === 'family' && !p.line) p.line = 'fanderl';
-    if (!p.sex) p.sex = FEMALE_IDS.includes(p.id) ? 'w' : 'm';
-    if (p.kind === 'companion' && !p.group) {
-      const g = GROUPS.find(gr => gr.ids.includes(p.id));
-      p.group = g ? g.id : GROUPS[GROUPS.length - 1].id;
-    }
-  });
+  data.persons.forEach(p => { if (!p.sex) p.sex = 'm'; });
   return data;
 }
 
@@ -59,15 +46,6 @@ function save() {
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function byId(id) { return state.persons.find(p => p.id === id); }
 function family() { return state.persons.filter(p => p.kind === 'family'); }
-function lineFamily() { return family().filter(p => p.line === currentLine); }
-
-function readLine() {
-  let id = null;
-  try { id = localStorage.getItem(STORE_KEY + '-line'); } catch (e) {}
-  return LINES.some(l => l.id === id) ? id : LINES[0].id;
-}
-function companions() { return state.persons.filter(p => p.kind === 'companion'); }
-
 function newId(name) {
   const base = (name || 'person').toLowerCase()
     .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss')
@@ -222,13 +200,11 @@ function hideHints() {
 
 const treeStage = document.getElementById('stage');
 const treeVP = makeViewport(treeStage, document.getElementById('canvas'));
-const netStage = document.getElementById('netStage');
-const netVP = makeViewport(netStage, document.getElementById('netCanvas'));
 
 /* ===================== Stammbaum-Layout ===================== */
 
 function computeLayout() {
-  const people = lineFamily();
+  const people = family();
   const inFam = id => people.some(p => p.id === id);
   const unitOf = {};
   const units = [];
@@ -394,158 +370,6 @@ function renderTree() {
   return layout;
 }
 
-/* ===================== Netzwerk der Weggefährten ===================== */
-
-function renderNetwork() {
-  const nodes = document.getElementById('netNodes');
-  const svg = document.getElementById('netLines');
-  const star = state.persons.find(p => p.star) || family()[0];
-  nodes.innerHTML = '';
-
-  const placed = [];        // {p, x, y, w, h}
-  const hubs = [];          // {label, x, y}
-  let paths = '';
-
-  const groups = GROUPS.map(g => ({
-    id: g.id,
-    label: g.label,
-    members: companions().filter(p => p.group === g.id)
-  })).filter(g => g.members.length);
-
-  const extra = companions().filter(p => !groups.some(g => g.members.includes(p)));
-  if (extra.length) groups.push({ id: 'weitere', label: 'Weitere', members: extra });
-
-  const R_HUB = 330;
-  const R1 = 560, R2 = 790;
-  const step = (Math.PI * 2) / groups.length;
-  const start = -Math.PI / 2;
-
-  groups.forEach((g, gi) => {
-    const a = start + gi * step;
-    const hx = Math.cos(a) * R_HUB, hy = Math.sin(a) * R_HUB;
-    hubs.push({ label: g.label + ' · ' + g.members.length, x: hx, y: hy });
-    paths += '<path class="thin" d="M0 0 L' + hx.toFixed(1) + ' ' + hy.toFixed(1) + '"/>';
-
-    const n = g.members.length;
-    const rows = n > 4 ? [g.members.slice(0, Math.ceil(n / 2)), g.members.slice(Math.ceil(n / 2))] : [g.members];
-
-    rows.forEach((row, ri) => {
-      /* Winkel je Knoten im Sektor, Radius so weit außen, dass 130px Abstand bleiben */
-      const sector = step * 0.82;
-      const spread = Math.min(0.34, sector / Math.max(row.length, 1));
-      const need = 130 / (2 * Math.sin(Math.max(spread, 0.02) / 2));
-      const R = Math.max(ri === 0 ? R1 : R2, need + (ri === 0 ? 0 : 200));
-      row.forEach((p, i) => {
-        const ang = a + (i - (row.length - 1) / 2) * spread;
-        const x = Math.cos(ang) * R, y = Math.sin(ang) * R;
-        placed.push({ p, x, y });
-        paths += '<path class="thin" d="M' + hx.toFixed(1) + ' ' + hy.toFixed(1) +
-          ' L' + x.toFixed(1) + ' ' + y.toFixed(1) + '"/>';
-      });
-    });
-  });
-
-  /* Bounding box */
-  const pad = 70;
-  const xs = placed.map(o => o.x), ys = placed.map(o => o.y);
-  const minX = Math.min(...xs, -NODE_W / 2) - NN_W / 2 - pad;
-  const maxX = Math.max(...xs, NODE_W / 2) + NN_W / 2 + pad;
-  const minY = Math.min(...ys, -NODE_H / 2) - NN_H / 2 - pad;
-  const maxY = Math.max(...ys, NODE_H / 2) + NN_H / 2 + pad;
-  const ox = -minX, oy = -minY;
-  const width = maxX - minX, height = maxY - minY;
-
-  /* Mittelpunkt: Wastl */
-  if (star) {
-    const el = document.createElement('button');
-    el.className = 'node ' + sexClass(star) + ' is-star';
-    el.style.left = (ox - NODE_W / 2) + 'px';
-    el.style.top = (oy - NODE_H / 2) + 'px';
-    el.dataset.id = star.id;
-    el.innerHTML = avatarHTML(star) +
-      '<span class="nm">' + esc(star.name) + '</span>' +
-      '<span class="dt">' + esc(lifespan(star)) + '</span>' +
-      '<span class="rl">' + esc(cut(star.role || '', 34)) + '</span>';
-    el.onclick = () => openPerson(star.id);
-    nodes.appendChild(el);
-  }
-
-  hubs.forEach(h => {
-    const el = document.createElement('div');
-    el.className = 'hub';
-    el.textContent = h.label;
-    el.style.left = (ox + h.x) + 'px';
-    el.style.top = (oy + h.y) + 'px';
-    nodes.appendChild(el);
-    el.style.left = (ox + h.x - el.offsetWidth / 2) + 'px';
-    el.style.top = (oy + h.y - el.offsetHeight / 2) + 'px';
-  });
-
-  placed.forEach(o => {
-    const el = document.createElement('button');
-    el.className = 'nnode ' + sexClass(o.p);
-    el.style.left = (ox + o.x - NN_W / 2) + 'px';
-    el.style.top = (oy + o.y - NN_H / 2) + 'px';
-    el.dataset.id = o.p.id;
-    el.dataset.search = (o.p.name + ' ' + (o.p.role || '') + ' ' + (o.p.place || '')).toLowerCase();
-    el.innerHTML = avatarHTML(o.p, 'av') +
-      '<span class="nn">' + esc(o.p.name) + '</span>' +
-      (o.p.role ? '<span class="nr">' + esc(cut(o.p.role, 30)) + '</span>' : '');
-    el.onclick = () => openPerson(o.p.id);
-    nodes.appendChild(el);
-  });
-
-  svg.setAttribute('width', width);
-  svg.setAttribute('height', height);
-  svg.innerHTML = '<g transform="translate(' + ox + ',' + oy + ')" fill="none" ' +
-    'stroke="#c8b99f" stroke-width="1.4" stroke-linecap="round" opacity=".85">' + paths + '</g>';
-  nodes.style.width = width + 'px';
-  nodes.style.height = height + 'px';
-
-  const layout = { width, height };
-  netVP.setLayout(layout);
-  return layout;
-}
-
-function filterNetwork(q) {
-  const term = (q || '').trim().toLowerCase();
-  document.querySelectorAll('.nnode').forEach(el => {
-    const hit = !term || el.dataset.search.includes(term);
-    el.classList.toggle('dim', !hit);
-    el.classList.toggle('hit', !!term && hit);
-  });
-  if (term) {
-    const first = document.querySelector('.nnode.hit');
-    if (first) netVP.focusEl(first, Math.max(netVP.v.k, 0.8));
-  }
-}
-
-/* ===================== Zeitstrahl ===================== */
-
-function renderTimeline() {
-  const wrap = document.getElementById('timeline');
-  wrap.innerHTML = '';
-  state.events.forEach(ev => {
-    const d = document.createElement('div');
-    d.className = 'tl-item' + (ev.flag ? ' is-flag' : '');
-    d.innerHTML =
-      '<div class="d">' + esc(ev.date) + '</div>' +
-      '<h3>' + esc(ev.title) + '</h3>' +
-      '<p>' + esc(ev.text) + '</p>';
-    d.onclick = () => openEventForm(ev.id);
-    wrap.appendChild(d);
-  });
-
-  const songs = document.getElementById('songList');
-  songs.innerHTML = '';
-  (state.songs || []).forEach(s => {
-    const d = document.createElement('div');
-    d.className = 'song';
-    d.innerHTML = '<b>' + esc(s.title) + '</b><p>' + esc(s.note) + '</p>';
-    songs.appendChild(d);
-  });
-}
-
 /* ===================== Sheets ===================== */
 
 const backdrop = document.getElementById('backdrop');
@@ -556,7 +380,7 @@ function openSheet(id) {
   document.getElementById(id).hidden = false;
 }
 function closeSheets() {
-  ['sheet', 'formSheet', 'eventSheet', 'menuSheet'].forEach(id => {
+  ['sheet', 'formSheet', 'menuSheet'].forEach(id => {
     document.getElementById(id).hidden = true;
   });
   backdrop.hidden = true;
@@ -564,7 +388,6 @@ function closeSheets() {
 backdrop.onclick = closeSheets;
 document.getElementById('sheetClose').onclick = closeSheets;
 document.getElementById('formClose').onclick = closeSheets;
-document.getElementById('eventClose').onclick = closeSheets;
 document.getElementById('menuClose').onclick = closeSheets;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheets(); });
 
@@ -579,7 +402,6 @@ function openPerson(id) {
   const siblings = parents.length
     ? state.persons.filter(x => x.id !== p.id && (x.parents || []).some(pid => (p.parents || []).includes(pid)))
     : [];
-  const group = p.kind === 'companion' ? GROUPS.find(g => g.id === p.group) : null;
 
   let html = '<div class="detail-head ' + sexClass(p) + '">' + avatarHTML(p) +
     '<div><h2>' + esc(p.name) + '</h2>' +
@@ -588,7 +410,6 @@ function openPerson(id) {
       ? '<p class="dates">' + esc([lifespan(p), p.place].filter(Boolean).join(' · ')) + '</p>' : '') +
     '</div></div>';
 
-  if (group) html += '<p class="detail-rel"><b>' + esc(group.label) + '</b></p>';
   if (p.photo) html += '<img class="detail-photo" src="' + p.photo + '" alt="">';
   if (p.notes) html += '<p class="detail-text">' + esc(p.notes) + '</p>';
 
@@ -599,10 +420,8 @@ function openPerson(id) {
 
   html += '<div class="detail-actions">' +
     '<button class="primary-btn" data-act="edit">Bearbeiten</button>' +
-    (p.kind === 'family'
-      ? '<button class="ghost-btn" data-act="addchild">+ Kind</button>' +
-        '<button class="ghost-btn" data-act="addpartner">+ Partner</button>'
-      : '') +
+    '<button class="ghost-btn" data-act="addchild">+ Kind</button>' +
+    '<button class="ghost-btn" data-act="addpartner">+ Partner</button>' +
     '</div>';
 
   body.innerHTML = html;
@@ -630,7 +449,6 @@ function openPersonForm(id, preset) {
   pendingPhoto = null;
   const p = id ? byId(id) : null;
   const form = document.getElementById('personForm');
-  const isCompanion = p ? p.kind === 'companion' : !!(preset && preset.kind === 'companion');
 
   document.getElementById('formTitle').textContent = p ? 'Person bearbeiten' : 'Neue Person';
   form.name.value = p ? p.name : '';
@@ -643,14 +461,7 @@ function openPersonForm(id, preset) {
 
   setPhotoPreview(p && p.photo ? p.photo : '');
 
-  form.group.innerHTML = GROUPS.map(g =>
-    '<option value="' + g.id + '">' + esc(g.label) + '</option>').join('');
-  form.group.value = p && p.group ? p.group : GROUPS[0].id;
-
-  document.getElementById('groupField').hidden = !isCompanion;
-  document.getElementById('relationFields').hidden = isCompanion;
-
-  const famOptions = family().filter(x => (!p || x.id !== p.id) && x.line === (p ? p.line : currentLine));
+  const famOptions = family().filter(x => !p || x.id !== p.id);
   fillSelect(form.parent1, famOptions, p ? (p.parents || [])[0] : (preset && preset.childOf) || '');
   fillSelect(form.parent2, famOptions, p ? (p.parents || [])[1] : '');
   fillSelect(form.partner, state.persons.filter(x => !p || x.id !== p.id),
@@ -662,7 +473,6 @@ function openPersonForm(id, preset) {
     if (other) form.parent2.value = other;
   }
 
-  form.dataset.kind = isCompanion ? 'companion' : 'family';
   document.getElementById('btnDelete').hidden = !p;
   openSheet('formSheet');
 }
@@ -715,12 +525,10 @@ function resizeImage(file, max, cb) {
 document.getElementById('personForm').addEventListener('submit', e => {
   e.preventDefault();
   const form = e.target;
-  const kind = form.dataset.kind === 'companion' ? 'companion' : 'family';
   let p = editingPersonId ? byId(editingPersonId) : null;
 
   if (!p) {
-    p = { id: newId(form.name.value), kind, parents: [], partners: [], photo: '' };
-    if (kind === 'family') p.line = currentLine;
+    p = { id: newId(form.name.value), kind: 'family', parents: [], partners: [], photo: '' };
     state.persons.push(p);
   }
   p.name = form.name.value.trim();
@@ -732,12 +540,8 @@ document.getElementById('personForm').addEventListener('submit', e => {
   p.sex = form.sex.value;
   if (pendingPhoto !== null) p.photo = pendingPhoto;
 
-  if (kind === 'companion') {
-    p.group = form.group.value;
-  } else {
-    p.parents = [form.parent1.value, form.parent2.value]
-      .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
-  }
+  p.parents = [form.parent1.value, form.parent2.value]
+    .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
 
   /* Nur der erste Partner steht im Formular, weitere (zweite Ehe) bleiben erhalten */
   const newPartner = form.partner.value;
@@ -777,57 +581,12 @@ document.getElementById('btnDelete').onclick = () => {
   toast('Gelöscht');
 };
 
-/* ---------- Ereignis-Formular ---------- */
-
-function openEventForm(id) {
-  editingEventId = id;
-  const ev = id ? state.events.find(e => e.id === id) : null;
-  const form = document.getElementById('eventForm');
-  document.getElementById('eventTitle').textContent = ev ? 'Ereignis bearbeiten' : 'Neues Ereignis';
-  form.date.value = ev ? ev.date : '';
-  form.title.value = ev ? ev.title : '';
-  form.text.value = ev ? ev.text : '';
-  document.getElementById('btnDeleteEvent').hidden = !ev;
-  openSheet('eventSheet');
-}
-
-document.getElementById('eventForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const form = e.target;
-  let ev = editingEventId ? state.events.find(x => x.id === editingEventId) : null;
-  if (!ev) {
-    ev = { id: 'ev-' + Date.now() };
-    state.events.push(ev);
-  }
-  ev.date = form.date.value.trim();
-  ev.title = form.title.value.trim();
-  ev.text = form.text.value.trim();
-  save();
-  renderTimeline();
-  closeSheets();
-  toast('Gespeichert');
-});
-
-document.getElementById('btnDeleteEvent').onclick = () => {
-  if (!editingEventId) return;
-  if (!confirm('Ereignis wirklich löschen?')) return;
-  state.events = state.events.filter(x => x.id !== editingEventId);
-  save();
-  renderTimeline();
-  closeSheets();
-  toast('Gelöscht');
-};
-
-document.getElementById('btnAddEvent').onclick = () => openEventForm(null);
-document.getElementById('btnAddCompanion').onclick = () => openPersonForm(null, { kind: 'companion' });
-
 /* ===================== Menü ===================== */
 
 document.getElementById('btnMenu').onclick = () => {
   const bytes = new Blob([JSON.stringify(state)]).size;
   document.getElementById('storageNote').textContent =
-    'Auf diesem Gerät gespeichert: ' + family().length + ' Personen im Stammbaum, ' +
-    companions().length + ' Weggefährten, ' + state.events.length + ' Ereignisse (' +
+    'Auf diesem Gerät gespeichert: ' + family().length + ' Personen (' +
     Math.round(bytes / 1024) + ' KB). Der Browser kann ungefähr 5 MB halten. Bei vielen Fotos regelmäßig eine Sicherung speichern.';
   openSheet('menuSheet');
 };
@@ -838,7 +597,7 @@ document.getElementById('btnExport').onclick = () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'stammbaum-fanderl-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.download = 'stammbaum-blendl-' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast('Sicherung heruntergeladen');
@@ -876,48 +635,11 @@ document.getElementById('btnReset').onclick = () => {
   toast('Zurückgesetzt');
 };
 
-/* ===================== Tabs, Zoom-Knöpfe, Suche ===================== */
-
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('is-active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('is-active'));
-    tab.classList.add('is-active');
-    document.getElementById(tab.dataset.view).classList.add('is-active');
-    startViews();
-    requestAnimationFrame(startViews);
-    setTimeout(startViews, 120);
-  };
-});
-
-function renderLineSwitch() {
-  const line = LINES.find(l => l.id === currentLine);
-  document.getElementById('docSubtitle').textContent = line.subtitle || state.subtitle || '';
-  const wrap = document.getElementById('lineSwitch');
-  wrap.innerHTML = LINES.map(l =>
-    '<button data-line="' + l.id + '"' + (l.id === currentLine ? ' class="is-active"' : '') + '>' +
-    esc(l.label) + '</button>').join('');
-  wrap.querySelectorAll('button').forEach(b => {
-    b.onclick = () => {
-      if (b.dataset.line === currentLine) return;
-      currentLine = b.dataset.line;
-      try { localStorage.setItem(STORE_KEY + '-line', currentLine); } catch (e) {}
-      renderLineSwitch();
-      renderTree();
-      needTreeStart = true;
-      startViews();
-    };
-  });
-}
+/* ===================== Zoom-Knöpfe ===================== */
 
 document.getElementById('btnZoomIn').onclick = () => treeVP.zoomCenter(1.2);
 document.getElementById('btnZoomOut').onclick = () => treeVP.zoomCenter(0.83);
 document.getElementById('btnFit').onclick = treeVP.fit;
-document.getElementById('btnNetIn').onclick = () => netVP.zoomCenter(1.2);
-document.getElementById('btnNetOut').onclick = () => netVP.zoomCenter(0.83);
-document.getElementById('btnNetFit').onclick = netVP.fit;
-
-document.getElementById('searchCompanions').addEventListener('input', e => filterNetwork(e.target.value));
 
 let toastTimer = null;
 function toast(msg) {
@@ -931,46 +653,33 @@ function toast(msg) {
 /* ===================== Start ===================== */
 
 let firstRender = true;
-let needTreeStart = true, needNetStart = true;
+let needTreeStart = true;
 
 function renderAll() {
   document.getElementById('docTitle').textContent = state.title || 'Stammbaum';
-  renderLineSwitch();
+  document.getElementById('docSubtitle').textContent = state.subtitle || '';
+  document.title = state.title || 'Stammbaum';
   renderTree();
-  renderNetwork();
-  renderTimeline();
-  document.getElementById('netHint').textContent =
-    companions().length + ' Weggefährten aus dem Heft · antippen für Details';
   if (firstRender) {
     firstRender = false;
     requestAnimationFrame(startViews);
     setTimeout(startViews, 300);
   } else {
     treeVP.apply();
-    netVP.apply();
-    filterNetwork(document.getElementById('searchCompanions').value);
   }
 }
 
 /* Startansicht erst setzen, wenn die Bühne wirklich Platz hat. */
 function startViews() {
   if (needTreeStart && treeStage.getBoundingClientRect().width) {
-    const line = LINES.find(l => l.id === currentLine);
-    const el = document.querySelector('#nodes .node[data-id="' + line.focus + '"]') ||
+    const el = document.querySelector('#nodes .node[data-id="' + (state.focus || INITIAL_DATA.focus) + '"]') ||
       document.querySelector('#nodes .node');
     if (el) { treeVP.focusEl(el); needTreeStart = false; }
   }
-  if (needNetStart && netStage.getBoundingClientRect().width) {
-    netVP.fit();
-    needNetStart = false;
-  }
 }
-if (window.ResizeObserver) {
-  new ResizeObserver(startViews).observe(treeStage);
-  new ResizeObserver(startViews).observe(netStage);
-}
+if (window.ResizeObserver) new ResizeObserver(startViews).observe(treeStage);
 
 renderAll();
 if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => { renderTree(); renderNetwork(); treeVP.apply(); netVP.apply(); });
+  document.fonts.ready.then(() => { renderTree(); treeVP.apply(); });
 }
