@@ -249,43 +249,61 @@ function computeLayout() {
 
   const unitW = u => u.members.length * NODE_W + (u.members.length - 1) * SPOUSE_GAP;
   const claimed = new Set();
-  let cursor = 0;
 
-  function shift(u, dx) {
-    u.x += dx;
-    u.kids.forEach(k => { if (k.placed) shift(k, dx); });
+  /* Kontur-Layout: jeder Teilbaum merkt sich je Generation seinen linken und rechten Rand.
+     Geschwister rücken so nah zusammen, wie es auf jeder Ebene einzeln passt,
+     statt dass jeder Ast über alle Generationen eine eigene Spalte belegt. */
+  function packRow(trees) {
+    const L = [], R = [], offs = [];
+    trees.forEach(t => {
+      let off = 0;
+      if (offs.length) {
+        off = -Infinity;
+        t.L.forEach((l, d) => { if (d < R.length) off = Math.max(off, R[d] + H_GAP - l); });
+        if (off === -Infinity) off = 0;
+      }
+      offs.push(off);
+      t.L.forEach((l, d) => { L[d] = d < L.length ? Math.min(L[d], l + off) : l + off; });
+      t.R.forEach((r, d) => { R[d] = d < R.length ? Math.max(R[d], r + off) : r + off; });
+    });
+    return { L, R, offs };
   }
 
-  function place(u, depth) {
+  /* liefert die Kontur des Teilbaums, relativ zur linken Kante von u */
+  function build(u, depth) {
     u.depth = depth;
     u.placed = true;
     const kids = u.kids.filter(k => !claimed.has(k));
     kids.forEach(k => claimed.add(k));
-
+    u.packed = kids;
     const w = unitW(u);
-    if (!kids.length) {
-      u.x = cursor;
-      cursor += w + H_GAP;
-      return;
-    }
-    const start = cursor;
-    kids.forEach(k => place(k, depth + 1));
+    if (!kids.length) { u.offs = []; return { L: [0], R: [w] }; }
+
+    const row = packRow(kids.map(k => build(k, depth + 1)));
     const first = kids[0], last = kids[kids.length - 1];
-    const center = (first.x + last.x + unitW(last)) / 2;
-    u.x = center - w / 2;
-    if (u.x < start) {
-      const dx = start - u.x;
-      kids.forEach(k => shift(k, dx));
-      u.x = start;
-    }
-    cursor = Math.max(cursor, u.x + w + H_GAP);
+    const center = (row.offs[0] + row.offs[row.offs.length - 1] + unitW(last)) / 2;
+    const px = center - w / 2;
+    u.offs = row.offs.map(o => o - px);
+    return {
+      L: [0, ...row.L.map(l => l - px)],
+      R: [w, ...row.R.map(r => r - px)]
+    };
   }
 
+  function assign(u, x) {
+    u.x = x;
+    u.packed.forEach((k, i) => assign(k, x + u.offs[i]));
+  }
+
+  const roots = [];
   units.forEach(u => {
     const hasParentsInTree = u.members.some(m => (m.parents || []).some(inFam));
-    if (!hasParentsInTree && !claimed.has(u)) { claimed.add(u); place(u, 0); }
+    if (!hasParentsInTree && !claimed.has(u)) { claimed.add(u); roots.push(u); }
   });
-  units.forEach(u => { if (!u.placed) { claimed.add(u); place(u, 0); } });
+  const rootTrees = roots.map(u => build(u, 0));
+  units.forEach(u => { if (!u.placed) { claimed.add(u); roots.push(u); rootTrees.push(build(u, 0)); } });
+  const top = packRow(rootTrees);
+  roots.forEach((u, i) => assign(u, top.offs[i]));
 
   const minX = Math.min(...units.map(u => u.x), 0);
   units.forEach(u => {
