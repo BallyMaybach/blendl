@@ -8,7 +8,9 @@ Fotos und eigene Texte lassen sich direkt in der Seite ergänzen.
 
 ## Ansichten
 
-- **Stammbaum** — Familie Fanderl: Eltern, vier Geschwister, Wastl, Lisl und Moni
+- **Stammbaum** — umschaltbar zwischen zwei Familien:
+  - **Blendl** — 12 Generationen von Georg Plönl (ca. 1650, Straubing) bis heute, abgeschrieben von den handschriftlichen Blättern I bis V
+  - **Fanderl** — Eltern, vier Geschwister, Wastl, Lisl und Moni
 - **Weggefährten** — 34 Personen aus dem Heft, als Netzwerk in fünf Gruppen rund um Wastl
 - **Zeitstrahl** — 31 Ereignisse von 1915 bis zu den Ausstellungen 2026, dazu die Lieder
 

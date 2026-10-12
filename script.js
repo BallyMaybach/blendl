@@ -2,13 +2,14 @@
 
 const STORE_KEY = 'stammbaum-fanderl-v1';
 
-const NODE_W = 150, NODE_H = 150, H_GAP = 26, V_GAP = 72, SPOUSE_GAP = 16;
+const NODE_W = 150, NODE_H = 172, H_GAP = 26, V_GAP = 72, SPOUSE_GAP = 16;
 const NN_W = 112, NN_H = 96;
 
 let state = load();
 let editingPersonId = null;
 let editingEventId = null;
 let pendingPhoto = null;   // null = unverändert, '' = entfernt, string = neues Foto
+let currentLine = readLine();
 
 /* ===================== Daten ===================== */
 
@@ -28,7 +29,15 @@ function load() {
 function normalize(data) {
   data.events = data.events || [];
   data.songs = data.songs || [];
+  /* Neue Personen aus einer neueren data.js übernehmen, ohne eigene Änderungen zu verlieren */
+  if ((data.version || 1) < INITIAL_DATA.version) {
+    INITIAL_DATA.persons.forEach(p => {
+      if (!data.persons.some(x => x.id === p.id)) data.persons.push(clone(p));
+    });
+    data.version = INITIAL_DATA.version;
+  }
   data.persons.forEach(p => {
+    if (p.kind === 'family' && !p.line) p.line = 'fanderl';
     if (!p.sex) p.sex = FEMALE_IDS.includes(p.id) ? 'w' : 'm';
     if (p.kind === 'companion' && !p.group) {
       const g = GROUPS.find(gr => gr.ids.includes(p.id));
@@ -50,6 +59,13 @@ function save() {
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function byId(id) { return state.persons.find(p => p.id === id); }
 function family() { return state.persons.filter(p => p.kind === 'family'); }
+function lineFamily() { return family().filter(p => p.line === currentLine); }
+
+function readLine() {
+  let id = null;
+  try { id = localStorage.getItem(STORE_KEY + '-line'); } catch (e) {}
+  return LINES.some(l => l.id === id) ? id : LINES[0].id;
+}
 function companions() { return state.persons.filter(p => p.kind === 'companion'); }
 
 function newId(name) {
@@ -62,7 +78,10 @@ function newId(name) {
 }
 
 function initials(name) {
-  return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  /* "Johann (I) Plönl" -> "JP": Zusätze wie (I) oder C. C. überspringen */
+  const words = (name || '?').split(/\s+/).filter(w => /^\p{L}{2}/u.test(w));
+  if (words.length > 2) words.splice(1, words.length - 2);
+  return (words.length ? words : [name || '?']).map(w => w[0].toUpperCase()).join('');
 }
 
 function lifespan(p) {
@@ -209,20 +228,30 @@ const netVP = makeViewport(netStage, document.getElementById('netCanvas'));
 /* ===================== Stammbaum-Layout ===================== */
 
 function computeLayout() {
-  const people = family();
+  const people = lineFamily();
   const inFam = id => people.some(p => p.id === id);
   const unitOf = {};
   const units = [];
 
   people.forEach(p => {
     if (unitOf[p.id]) return;
-    const members = [p];
-    (p.partners || []).forEach(pid => {
-      const partner = byId(pid);
-      if (partner && partner.kind === 'family' && !unitOf[pid] && !members.includes(partner)) {
-        members.push(partner);
-      }
-    });
+    /* alle Ehepartner zusammenfassen, auch bei zwei Ehen */
+    let members = [];
+    const stack = [p];
+    while (stack.length) {
+      const x = stack.shift();
+      if (members.includes(x) || unitOf[x.id]) continue;
+      members.push(x);
+      (x.partners || []).forEach(pid => {
+        const partner = people.find(q => q.id === pid);
+        if (partner) stack.push(partner);
+      });
+    }
+    if (members.length > 2) {
+      const hub = members.reduce((a, b) => (b.partners || []).length > (a.partners || []).length ? b : a);
+      const others = members.filter(m => m !== hub);
+      members = [others[0], hub, ...others.slice(1)];
+    }
     const u = { members, kids: [] };
     members.forEach(m => { unitOf[m.id] = u; });
     units.push(u);
@@ -307,16 +336,24 @@ function renderTree() {
   units.forEach(u => {
     const y = u.y + 20;
 
-    if (u.members.length > 1) {
-      const x1 = memberX(u, 0) + NODE_W;
-      const x2 = memberX(u, 1);
+    for (let i = 1; i < u.members.length; i++) {
+      const a = u.members[i - 1], b = u.members[i];
+      if (!(a.partners || []).includes(b.id) && !(b.partners || []).includes(a.id)) continue;
+      const x1 = memberX(u, i - 1) + NODE_W;
+      const x2 = memberX(u, i);
       const cy = y + NODE_H / 2;
       paths += '<path d="M' + x1 + ' ' + cy + ' H' + x2 + '"/>';
     }
 
     const kids = u.kids.filter(k => k.placed && k.depth === u.depth + 1);
     if (kids.length) {
-      const pcx = u.x + 20 + unitW(u) / 2;
+      let pcx = u.x + 20 + unitW(u) / 2;
+      if (u.members.length > 2) {
+        /* bei zwei Ehen: Linie zwischen den Eltern der Kinder ansetzen */
+        const k0 = kids[0].members.find(m => m.id === kids[0].anchorId) || kids[0].members[0];
+        const idx = u.members.map((m, i) => (k0.parents || []).includes(m.id) ? i : -1).filter(i => i >= 0);
+        if (idx.length === 2) pcx = (memberX(u, idx[0]) + memberX(u, idx[1]) + NODE_W) / 2;
+      }
       const pby = y + NODE_H;
       const busY = pby + V_GAP / 2;
       paths += '<path d="M' + pcx + ' ' + pby + ' V' + busY + '"/>';
@@ -613,7 +650,7 @@ function openPersonForm(id, preset) {
   document.getElementById('groupField').hidden = !isCompanion;
   document.getElementById('relationFields').hidden = isCompanion;
 
-  const famOptions = family().filter(x => !p || x.id !== p.id);
+  const famOptions = family().filter(x => (!p || x.id !== p.id) && x.line === (p ? p.line : currentLine));
   fillSelect(form.parent1, famOptions, p ? (p.parents || [])[0] : (preset && preset.childOf) || '');
   fillSelect(form.parent2, famOptions, p ? (p.parents || [])[1] : '');
   fillSelect(form.partner, state.persons.filter(x => !p || x.id !== p.id),
@@ -683,6 +720,7 @@ document.getElementById('personForm').addEventListener('submit', e => {
 
   if (!p) {
     p = { id: newId(form.name.value), kind, parents: [], partners: [], photo: '' };
+    if (kind === 'family') p.line = currentLine;
     state.persons.push(p);
   }
   p.name = form.name.value.trim();
@@ -701,12 +739,15 @@ document.getElementById('personForm').addEventListener('submit', e => {
       .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
   }
 
+  /* Nur der erste Partner steht im Formular, weitere (zweite Ehe) bleiben erhalten */
   const newPartner = form.partner.value;
-  (p.partners || []).forEach(pid => {
-    const other = byId(pid);
+  const oldFirst = (p.partners || [])[0];
+  const rest = (p.partners || []).slice(1).filter(x => x !== newPartner);
+  if (oldFirst && oldFirst !== newPartner) {
+    const other = byId(oldFirst);
     if (other && other.partners) other.partners = other.partners.filter(x => x !== p.id);
-  });
-  p.partners = newPartner ? [newPartner] : [];
+  }
+  p.partners = newPartner ? [newPartner, ...rest] : rest;
   if (newPartner) {
     const other = byId(newPartner);
     if (other) {
@@ -849,6 +890,26 @@ document.querySelectorAll('.tab').forEach(tab => {
   };
 });
 
+function renderLineSwitch() {
+  const line = LINES.find(l => l.id === currentLine);
+  document.getElementById('docSubtitle').textContent = line.subtitle || state.subtitle || '';
+  const wrap = document.getElementById('lineSwitch');
+  wrap.innerHTML = LINES.map(l =>
+    '<button data-line="' + l.id + '"' + (l.id === currentLine ? ' class="is-active"' : '') + '>' +
+    esc(l.label) + '</button>').join('');
+  wrap.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      if (b.dataset.line === currentLine) return;
+      currentLine = b.dataset.line;
+      try { localStorage.setItem(STORE_KEY + '-line', currentLine); } catch (e) {}
+      renderLineSwitch();
+      renderTree();
+      needTreeStart = true;
+      startViews();
+    };
+  });
+}
+
 document.getElementById('btnZoomIn').onclick = () => treeVP.zoomCenter(1.2);
 document.getElementById('btnZoomOut').onclick = () => treeVP.zoomCenter(0.83);
 document.getElementById('btnFit').onclick = treeVP.fit;
@@ -874,7 +935,7 @@ let needTreeStart = true, needNetStart = true;
 
 function renderAll() {
   document.getElementById('docTitle').textContent = state.title || 'Stammbaum';
-  document.getElementById('docSubtitle').textContent = state.subtitle || '';
+  renderLineSwitch();
   renderTree();
   renderNetwork();
   renderTimeline();
@@ -894,8 +955,9 @@ function renderAll() {
 /* Startansicht erst setzen, wenn die Bühne wirklich Platz hat. */
 function startViews() {
   if (needTreeStart && treeStage.getBoundingClientRect().width) {
-    const star = state.persons.find(p => p.star) || family()[0];
-    const el = star && document.querySelector('#nodes .node[data-id="' + star.id + '"]');
+    const line = LINES.find(l => l.id === currentLine);
+    const el = document.querySelector('#nodes .node[data-id="' + line.focus + '"]') ||
+      document.querySelector('#nodes .node');
     if (el) { treeVP.focusEl(el); needTreeStart = false; }
   }
   if (needNetStart && netStage.getBoundingClientRect().width) {
