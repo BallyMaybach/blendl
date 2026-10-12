@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-- **Projekt:** Stammbaum Blendl (Repo heisst noch stammbaum-fanderl)
+- **Projekt:** Stammbaum Blendl (Repo: BallyMaybach/blendl)
 - **Was es tut:** Interaktiver Stammbaum als Webapp (zoomen, Personen antippen, Fotos und Texte ergaenzen).
 - **Stand:** Nur noch der Stammbaum der Familie Blendl: 62 Personen, 12 Generationen ab ca. 1650, abgeschrieben von den handschriftlichen Blaettern I-V. Kompakte Karten (116x122). Bearbeiten-Modus, Foto-Upload, Export/Import als JSON. Fanderl-Familie, Weggefaehrten-Netzwerk und Zeitstrahl wurden entfernt.
 - **Jetzt:** Unsichere Lesungen pruefen (stehen in den Notizen der Personen), fehlende Orte ergaenzen.
-- **Deployment:** GitHub Pages, https://ballymaybach.github.io/stammbaum-fanderl/ (lokal: `python -m http.server 5173`)
+- **Deployment:** GitHub Pages, https://ballymaybach.github.io/blendl/ (lokal: `python -m http.server 5173`)
 - **Design-Richtung:** Light, warm (Papier/Sepia), mobile-first.
 
 ## Learnings

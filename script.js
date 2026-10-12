@@ -6,6 +6,7 @@ const NODE_W = 116, NODE_H = 122, H_GAP = 12, V_GAP = 40, SPOUSE_GAP = 6;
 
 let state = load();
 let editingPersonId = null;
+let editingPreset = null;
 let pendingPhoto = null;   // null = unverändert, '' = entfernt, string = neues Foto
 
 /* ===================== Daten ===================== */
@@ -440,6 +441,8 @@ function openPerson(id) {
     '<button class="primary-btn" data-act="edit">Bearbeiten</button>' +
     '<button class="ghost-btn" data-act="addchild">+ Kind</button>' +
     '<button class="ghost-btn" data-act="addpartner">+ Partner</button>' +
+    ((p.parents || []).length < 2 ? '<button class="ghost-btn" data-act="addparent">+ Elternteil</button>' : '') +
+    '<button class="ghost-btn" data-act="addsibling">+ Geschwister</button>' +
     '</div>';
 
   body.innerHTML = html;
@@ -449,6 +452,15 @@ function openPerson(id) {
   if (ac) ac.onclick = () => openPersonForm(null, { childOf: p.id });
   const ap = body.querySelector('[data-act="addpartner"]');
   if (ap) ap.onclick = () => openPersonForm(null, { partnerOf: p.id });
+  const apar = body.querySelector('[data-act="addparent"]');
+  if (apar) apar.onclick = () => openPersonForm(null, { parentOf: p.id });
+  body.querySelector('[data-act="addsibling"]').onclick = () => {
+    if (!(p.parents || []).length) {
+      toast('Erst einen Elternteil eintragen, dann lassen sich Geschwister verbinden');
+      return;
+    }
+    openPersonForm(null, { siblingOf: p.id });
+  };
 
   openSheet('sheet');
 }
@@ -464,6 +476,7 @@ function relRow(label, list) {
 
 function openPersonForm(id, preset) {
   editingPersonId = id;
+  editingPreset = id ? null : (preset || null);
   pendingPhoto = null;
   const p = id ? byId(id) : null;
   const form = document.getElementById('personForm');
@@ -484,6 +497,26 @@ function openPersonForm(id, preset) {
   fillSelect(form.parent2, famOptions, p ? (p.parents || [])[1] : '');
   fillSelect(form.partner, state.persons.filter(x => !p || x.id !== p.id),
     p ? (p.partners || [])[0] : (preset && preset.partnerOf) || '');
+
+  if (!p && preset && preset.siblingOf) {
+    const sib = byId(preset.siblingOf);
+    form.parent1.value = (sib.parents || [])[0] || '';
+    form.parent2.value = (sib.parents || [])[1] || '';
+  }
+
+  /* neuer Elternteil: ist schon einer da, wird der neue gleich sein Partner */
+  if (!p && preset && preset.parentOf) {
+    const child = byId(preset.parentOf);
+    const known = byId((child.parents || [])[0]);
+    if (known) {
+      form.partner.value = known.id;
+      form.sex.value = known.sex === 'w' ? 'm' : 'w';
+    }
+    if (child.role) {
+      const m = child.role.match(/^(\d+)\. Generation/);
+      if (m && +m[1] > 1) form.role.value = (+m[1] - 1) + '. Generation';
+    }
+  }
 
   if (!p && preset && preset.childOf) {
     const parent = byId(preset.childOf);
@@ -545,6 +578,7 @@ document.getElementById('personForm').addEventListener('submit', e => {
   const form = e.target;
   let p = editingPersonId ? byId(editingPersonId) : null;
 
+  const isNew = !p;
   if (!p) {
     p = { id: newId(form.name.value), kind: 'family', parents: [], partners: [], photo: '' };
     state.persons.push(p);
@@ -577,6 +611,15 @@ document.getElementById('personForm').addEventListener('submit', e => {
       if (!other.partners.includes(p.id)) other.partners.push(p.id);
     }
   }
+
+  /* "+ Elternteil": neue Person beim Kind als Elternteil eintragen */
+  if (isNew && editingPreset && editingPreset.parentOf) {
+    const child = byId(editingPreset.parentOf);
+    if (child && !(child.parents || []).includes(p.id) && (child.parents || []).length < 2) {
+      child.parents = [...(child.parents || []), p.id];
+    }
+  }
+  editingPreset = null;
 
   save();
   renderAll();
